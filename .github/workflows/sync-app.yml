@@ -1,0 +1,26 @@
+name: Sync Laravel App to WSL2
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy-app:
+    runs-on: self-hosted
+    steps:
+      - name: Pull Laravel Code
+        run: |
+          # 在構建前校準時間，避免編譯錯誤
+          sudo hwclock -s
+          # 進入 Docker 專案下的 app 目錄
+          cd ~/projects/docker/app
+          # 強制同步，避免權限或快取導致衝突
+          git fetch origin main
+          git reset --hard origin/main
+          
+      - name: Optimization
+        run: |
+          cd ~/projects/docker
+          # 讓容器內的 Laravel 執行必要指令
+          docker-compose exec -T php-fpm composer install --no-dev --optimize-autoloader
+          docker-compose exec -T php-fpm php artisan optimize:clear
