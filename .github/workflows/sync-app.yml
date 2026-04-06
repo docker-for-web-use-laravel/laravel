@@ -1,0 +1,42 @@
+name: Sync Laravel App to WSL2
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy-app:
+    runs-on: self-hosted
+    steps:
+      - name: Sync Code and Reset Permissions
+        run: |
+          # 1. 校準系統時間，避免 Git SSL 或編譯錯誤
+          sudo hwclock -s
+          
+          # 2. 進入專案目錄並強制同步
+          cd ~/projects/docker/app
+          git fetch origin main
+          git reset --hard origin/main
+          
+          # 3. 修正權限，確保容器內的 www 使用者 (1000) 可讀寫
+          # 僅針對需要寫入的目錄進行權限調整
+          sudo chown -R 1000:1000 storage bootstrap/cache
+          chmod -R 775 storage bootstrap/cache
+
+      - name: Docker Container Management
+        run: |
+          cd ~/projects/docker
+          # 確保容器處於執行狀態，避免 exec 指令失敗
+          docker-compose up -d
+
+      - name: Laravel Optimization
+        run: |
+          cd ~/projects/docker
+          # 執行 Composer 安裝 (使用 -T 避免 TTY 錯誤)
+          docker-compose exec -T php-fpm composer install --no-dev --optimize-autoloader
+          
+          # 2. 執行 Laravel 優化指令（透過 Docker 容器執行）
+          # -T 參數用於非互動式終端
+          docker-compose exec -T php-fpm php artisan optimize:clear
+          docker-compose exec -T php-fpm php artisan config:cache
+          docker-compose exec -T php-fpm php artisan route:cache
